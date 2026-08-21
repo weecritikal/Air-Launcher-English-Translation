@@ -1,6 +1,6 @@
 //
 //  DataPacksManagerViewController.h
-//  Amethyst
+//  Flux
 //
 //  Data pack manager view controller, modelled on ModsManagerViewController
 //  Local/online mode switching, search, enable/disable, delete, import

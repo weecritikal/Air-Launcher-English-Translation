@@ -1,6 +1,6 @@
 //
 //  MurmurHash2.h
-//  Amethyst
+//  Flux
 //
 //  MurmurHash2 streaming incremental hash helper (the variant CurseForge uses for file fingerprints)
 //

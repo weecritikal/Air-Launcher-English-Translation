@@ -1,6 +1,6 @@
 //
 //  AccountLoginViewController.m
-//  Amethyst
+//  Flux
 //
 //  Modelled on the account login screens of FCL (Fold Craft Launcher) and HMCL:
 //  - Title area at the top (large title + subtitle)

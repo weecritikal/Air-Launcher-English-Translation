@@ -1,6 +1,6 @@
 //
 //  ShaderVersionTableViewCell.h
-//  Amethyst
+//  Flux
 //
 //  Table view cell for displaying shader version information
 //

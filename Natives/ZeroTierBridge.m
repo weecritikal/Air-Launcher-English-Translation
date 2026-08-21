@@ -1,6 +1,6 @@
 //
 //  ZeroTierBridge.m
-//  Angel Aura Amethyst
+//  Flux
 //
 //  Implementation of the Objective-C wrapper layer for the ZeroTier libzt C API (slimmed-down version)
 //

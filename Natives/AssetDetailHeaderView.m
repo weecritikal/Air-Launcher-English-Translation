@@ -1,6 +1,6 @@
 //
 //  AssetDetailHeaderView.m
-//  Amethyst
+//  Flux
 //
 //  Implementation of the asset detail header view (modelled on the project detail header in FCL/ZL2)
 //

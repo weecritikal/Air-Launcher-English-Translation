@@ -1,6 +1,6 @@
 //
 //  AnnouncementService.m
-//  Amethyst
+//  Flux
 //
 
 #import "AnnouncementService.h"

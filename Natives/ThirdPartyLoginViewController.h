@@ -1,6 +1,6 @@
 //
 //  ThirdPartyLoginViewController.h
-//  Amethyst
+//  Flux
 //
 //  Modeled on the Android FCL (Fold Craft Launcher):
 //  LittleSkin and custom Yggdrasil third-party logins share a single card-style login form page,

@@ -1,6 +1,6 @@
 //
 //  NeoForgeDirectInstaller.h
-//  Amethyst
+//  Flux
 //
 //  Direct NeoForge installer, independent from Forge direct installer.
 //

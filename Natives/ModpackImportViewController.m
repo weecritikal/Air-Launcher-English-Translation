@@ -1,6 +1,6 @@
 //
 //  ModpackImportViewController.m
-//  Amethyst
+//  Flux
 //
 //  Reworked after FCL ModpackImportScreen / HMCL ModpackProviderPane / ZL2 ModpackImportScreen
 //

@@ -1,6 +1,6 @@
 //
 //  TouchControllerBridge.m
-//  Angel Aura Amethyst
+//  Flux
 //
 //  TouchController JNI bridge implementation
 //  Implements the communication between the Minecraft TouchController mod and the iOS launcher
@@ -36,7 +36,7 @@ static os_log_t touchControllerLog = NULL;
 @implementation TouchControllerBridge
 
 + (void)load {
-    touchControllerLog = os_log_create("com.air-devs.air", "TouchController");
+    touchControllerLog = os_log_create("com.weecritikal.flux", "TouchController");
     [self initializeTouchController];
 }
 

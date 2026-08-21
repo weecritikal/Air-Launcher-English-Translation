@@ -1,6 +1,6 @@
 //
 //  ShaderTableViewCell.m
-//  Amethyst
+//  Flux
 //
 //  Shader table view cell implementation
 //

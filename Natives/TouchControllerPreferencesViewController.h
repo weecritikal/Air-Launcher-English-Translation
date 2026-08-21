@@ -1,6 +1,6 @@
 //
 //  TouchControllerPreferencesViewController.h
-//  Angel Aura Amethyst
+//  Flux
 //
 //  TouchController settings page
 //  Lets the user choose the TouchController communication method (UDP or static library)

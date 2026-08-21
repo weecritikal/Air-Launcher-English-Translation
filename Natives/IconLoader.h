@@ -1,6 +1,6 @@
 //
 //  IconLoader.h
-//  Amethyst
+//  Flux
 //
 //  Unified project icon loader (modelled on the best practices of FCL Glide + ZL2 Coil)
 //

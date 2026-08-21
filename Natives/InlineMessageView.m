@@ -1,6 +1,6 @@
 //
 //  InlineMessageView.m
-//  Amethyst
+//  Flux
 //
 //  Modelled on the inline messages of FCL/ZL2, replacing UIAlertController popups
 //

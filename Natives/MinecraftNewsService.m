@@ -1,6 +1,6 @@
 //
 //  MinecraftNewsService.m
-//  Amethyst
+//  Flux
 //
 
 #import "MinecraftNewsService.h"
@@ -78,7 +78,7 @@ static NSString * const MCNewsBaseAPIURL = @"https://net-secondary.web.minecraft
                                                         timeoutInterval:30.0];
     [request setHTTPMethod:@"GET"];
     // See HttpSenderExtension in PCL-CE: a custom UA improves reliability and avoids being blocked as a crawler
-    [request setValue:@"AngelAuraAmethyst/1.0 (iOS; Minecraft Launcher)" forHTTPHeaderField:@"User-Agent"];
+    [request setValue:@"Flux/1.0 (iOS; Minecraft Launcher)" forHTTPHeaderField:@"User-Agent"];
     [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
     [request setValue:@"gzip, deflate" forHTTPHeaderField:@"Accept-Encoding"];
 

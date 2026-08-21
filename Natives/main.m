@@ -103,8 +103,8 @@ bool init_checkForJailbreak() {
 }
 
 void init_logDeviceAndVer(char *argument) {
-    // Amethyst version
-    NSLog(@"[Pre-Init] Amethyst iOS Remastered INIT!");
+    // Flux version
+    NSLog(@"[Pre-Init] Flux iOS Remastered INIT!");
     NSLog(@"[Pre-Init] GitHub: https://github.com/weecritikal/Air-Launcher-English-Translation");
     NSLog(@"[Pre-Init] Please try not to post this log of the remastered launcher to the original GitHub Issues for help.");
     NSLog(@"[Pre-Init] Version: %@", NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"], CONFIG_TYPE);
@@ -279,7 +279,27 @@ void init_setupHomeDirectory() {
     
     BOOL isNotSandboxed = [@(getenv("HOME")).lastPathComponent isEqualToString:NSUserName()];
     homeDir = [NSString stringWithFormat:@"%s/Documents%@", getenv("HOME"),
-        isNotSandboxed ? @"/AngelAuraAmethyst":@""];
+        isNotSandboxed ? @"/Flux":@""];
+
+    // Installs that are not sandboxed keep their data in a named folder, and that name
+    // used to be the old one. Renaming the app must not strand somebody's worlds and
+    // instances in a directory nothing looks at any more, so carry them across the first
+    // time the new location is missing and the old one is still there.
+    if (isNotSandboxed && ![fm fileExistsAtPath:homeDir]) {
+        NSString *previousHome = [NSString stringWithFormat:@"%s/Documents/AngelAuraAmethyst", getenv("HOME")];
+        if ([fm fileExistsAtPath:previousHome]) {
+            NSError *moveError;
+            if ([fm moveItemAtPath:previousHome toPath:homeDir error:&moveError]) {
+                NSLog(@"[Pre-init] Moved your existing data from %@ to %@", previousHome, homeDir);
+            } else {
+                // Fall back to the old location rather than starting empty next to data
+                // the user still has.
+                NSLog(@"[Pre-init] Could not move %@ to %@ (%@). Continuing to use the old location.",
+                      previousHome, homeDir, moveError.localizedDescription);
+                homeDir = previousHome;
+            }
+        }
+    }
 
     if (![fm fileExistsAtPath:homeDir] ) {
         [fm createDirectoryAtPath:homeDir withIntermediateDirectories:NO attributes:nil error:&homeError];
@@ -336,7 +356,7 @@ int main(int argc, char *argv[]) {
     init_setupAccounts();
     init_setupCustomControls();
 
-    // If sandbox is disabled, W^X JIT can be enabled by Amethyst itself
+    // If sandbox is disabled, W^X JIT can be enabled by Flux itself
     if (!isJITEnabled(true) && getEntitlementValue(@"com.apple.private.security.no-sandbox")) {
         NSLog(@"[Pre-init] no-sandbox: YES, trying to enable JIT");
         int pid;

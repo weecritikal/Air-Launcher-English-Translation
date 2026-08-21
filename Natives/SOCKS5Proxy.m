@@ -1,6 +1,6 @@
 //
 //  SOCKS5Proxy.m
-//  Angel Aura Amethyst
+//  Flux
 //
 //  Local SOCKS5 proxy server implementation
 //

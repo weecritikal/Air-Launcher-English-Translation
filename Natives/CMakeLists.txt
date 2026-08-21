@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.6)
-project(AngelAuraAmethyst)
+project(Flux)
 
 # Read the CurseForge API key from an environment variable
 # It cannot be passed through the Makefile with -D, because Make expands environment variable values recursively,
@@ -251,10 +251,10 @@ target_link_libraries(AFNetworking
 )
 
 # MinecraftAccount JNI
-add_library(AmethystAccountJNI SHARED
+add_library(FluxAccountJNI SHARED
   authenticator/MinecraftAccountJNI.m
 )
-target_link_libraries(AmethystAccountJNI)
+target_link_libraries(FluxAccountJNI)
 
 # Audio capture JNI bridge (SimpleVoiceChat Mod support)
 add_library(audio_capture SHARED
@@ -264,8 +264,8 @@ target_link_libraries(audio_capture
   "-framework AVFoundation"
 )
 
-# Angel Aura Amethyst
-add_executable(AngelAuraAmethyst
+# Flux
+add_executable(Flux
   dyld_bypass_validation.m
   dyld_patch_platform.m
   main.m
@@ -504,17 +504,17 @@ if(EXISTS "${MODLOADER_ICONS_DIR}")
       set_source_files_properties(${_icon} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/ModLoaderIcons")
     endforeach()
     # Attach the resource files to the main executable target so CMake copies them into the bundle
-    target_sources(AngelAuraAmethyst PRIVATE ${MODLOADER_ICON_FILES})
+    target_sources(Flux PRIVATE ${MODLOADER_ICON_FILES})
   endif()
 else()
   message(STATUS "ModLoaderIcons directory not found: ${MODLOADER_ICONS_DIR}")
 endif()
 
 if("${CMAKE_HOST_SYSTEM_NAME}" MATCHES "Linux|^GNU$|Android")
-  target_sources(AngelAuraAmethyst PUBLIC non_darwin_utils.m)
+  target_sources(Flux PUBLIC non_darwin_utils.m)
 endif()
 
-target_link_libraries(AngelAuraAmethyst
+target_link_libraries(Flux
   PUBLIC AFNetworking
   lzma
   "-F'${CMAKE_CURRENT_LIST_DIR}/build'"
@@ -541,7 +541,7 @@ target_link_libraries(AngelAuraAmethyst
   ${TOUCHCONTROLLER_LIB}
   # Terracotta multiplayer temporarily removed: ${TERRACOTTA_LIB} "-lc++" "-lresolv"
 )
-set_target_properties(AngelAuraAmethyst PROPERTIES
+set_target_properties(Flux PROPERTIES
   MACOSX_BUNDLE TRUE
   MACOSX_FRAMEWORK_IDENTIFIER org.cmake.ExecutableTarget
   MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_LIST_DIR}/Info.plist")

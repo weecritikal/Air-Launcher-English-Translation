@@ -1,6 +1,6 @@
 //
 //  AssetVersionViewController.m
-//  Amethyst
+//  Flux
 //
 // Implementation of the generic asset version picker view controller
 // Phase 3 alignment: reworked into an FCL-style chip filter bar (game version + sort), matching ModVersionViewController

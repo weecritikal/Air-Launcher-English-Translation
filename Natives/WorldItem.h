@@ -1,6 +1,6 @@
 //
 //  WorldItem.h
-//  Amethyst
+//  Flux
 //
 //  World save data model, modeled on ShaderItem, with world-specific properties such as worldName and levelDatPath added
 //  Locally scans the subdirectories of saves/ (each subdirectory containing a level.dat is one world)

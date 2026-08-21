@@ -1,6 +1,6 @@
 //
 //  MinecraftNewsViewController.m
-//  Amethyst
+//  Flux
 //
 
 #import "MinecraftNewsViewController.h"

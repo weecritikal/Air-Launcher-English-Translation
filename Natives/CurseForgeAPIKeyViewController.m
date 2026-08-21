@@ -1,6 +1,6 @@
 //
 //  CurseForgeAPIKeyViewController.m
-//  Amethyst
+//  Flux
 //
 //  Implementation of the runtime CurseForge API key settings page
 //  UI style: Bento Grid + Material Design 3

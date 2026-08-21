@@ -1,6 +1,6 @@
 //
 //  ThirdPartyLoginViewController.m
-//  Amethyst
+//  Flux
 //
 //  Modeled on Android FCL: the LittleSkin / custom third-party login form page
 //

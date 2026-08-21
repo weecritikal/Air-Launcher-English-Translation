@@ -1,6 +1,6 @@
 //
 //  TouchControllerPreferencesViewController.m
-//  Angel Aura Amethyst
+//  Flux
 //
 //  TouchController settings page implementation
 //

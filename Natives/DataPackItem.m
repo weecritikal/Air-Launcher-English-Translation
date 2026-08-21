@@ -1,6 +1,6 @@
 //
 //  DataPackItem.m
-//  Amethyst
+//  Flux
 //
 //  Data pack model implementation
 //

@@ -1,6 +1,6 @@
 //
 //  AssetVersionViewController.h
-//  Amethyst
+//  Flux
 //
 //  Generic asset version picker view controller
 //  Used for resource packs / data packs / worlds — the three asset types with no concept of a "loader"

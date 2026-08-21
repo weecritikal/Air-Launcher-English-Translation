@@ -1,6 +1,6 @@
 //
 //  ModpackConfiguration.m
-//  Amethyst
+//  Flux
 //
 //  Created by iFlow on 2024/11/29.
 //

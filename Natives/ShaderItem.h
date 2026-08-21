@@ -1,6 +1,6 @@
 //
 //  ShaderItem.h
-//  Amethyst
+//  Flux
 //
 //  Shader pack data model for shader management
 //

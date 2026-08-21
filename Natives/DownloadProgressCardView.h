@@ -1,6 +1,6 @@
 //
 //  DownloadProgressCardView.h
-//  Amethyst
+//  Flux
 //
 //  Download progress card view (modelled on the download progress UI of FCL/ZL2/HMCL)
 //

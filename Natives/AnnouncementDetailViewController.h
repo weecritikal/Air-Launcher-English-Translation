@@ -1,6 +1,6 @@
 //
 //  AnnouncementDetailViewController.h
-//  Amethyst
+//  Flux
 //
 //  Announcement detail view controller
 //  - Title at the top (large) + date (small, gray)

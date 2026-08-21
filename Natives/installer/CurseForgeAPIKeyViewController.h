@@ -1,6 +1,6 @@
 //
 //  CurseForgeAPIKeyViewController.h
-//  Amethyst
+//  Flux
 //
 //  Runtime settings page for the CurseForge API key
 //

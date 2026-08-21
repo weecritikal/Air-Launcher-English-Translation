@@ -1,6 +1,6 @@
 //
 //  ModLoaderInstallViewController.h
-//  Amethyst
+//  Flux
 //
 //  Rebuilt after the mod loader selection screen of FCL (FoldCraftLauncher).
 //  - The loader list uses a grouped UITableView with card-style row selection

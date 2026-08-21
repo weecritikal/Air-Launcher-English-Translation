@@ -514,7 +514,7 @@ public class GLFW
 
     static {
         try {
-            System.load(System.getenv("BUNDLE_PATH") + "/AngelAuraAmethyst");
+            System.load(System.getenv("BUNDLE_PATH") + "/Flux");
         } catch (UnsatisfiedLinkError e) {
             e.printStackTrace();
         }
@@ -584,7 +584,7 @@ public class GLFW
         throw new UnsupportedOperationException();
     }
 
-    private static final SharedLibrary GLFW = new MacOSXLibraryDL("AngelAuraAmethyst", DynamicLinkLoader.RTLD_DEFAULT);
+    private static final SharedLibrary GLFW = new MacOSXLibraryDL("Flux", DynamicLinkLoader.RTLD_DEFAULT);
 
 
     /** Contains the function pointers loaded from the glfw {@link SharedLibrary}. */

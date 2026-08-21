@@ -1,6 +1,6 @@
 //
 //  MinecraftNewsViewController.h
-//  Amethyst
+//  Flux
 //
 //  Minecraft news list view controller
 //  Modelled on the waterfall card layout of PCL-CE PageHomepageNewsView (using UICollectionView + CompositionalLayout on iOS)

@@ -1,6 +1,6 @@
 //
 //  WorldService.h
-//  Amethyst
+//  Flux
 //
 //  World save management and download service, structured after ResourcePackService/DataPackService
 //  The API consistently takes NSString *profileName

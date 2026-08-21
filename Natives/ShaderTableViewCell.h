@@ -1,6 +1,6 @@
 //
 //  ShaderTableViewCell.h
-//  Amethyst
+//  Flux
 //
 //  Custom table view cell for displaying shader information
 //

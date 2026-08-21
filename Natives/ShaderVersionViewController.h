@@ -1,6 +1,6 @@
 //
 //  ShaderVersionViewController.h
-//  Amethyst
+//  Flux
 //
 //  View controller for selecting shader versions
 //

@@ -1,6 +1,6 @@
 //
 //  MinecraftNewsItem.h
-//  Amethyst
+//  Flux
 //
 //  Official Minecraft news data model
 //  Field definitions taken from PCL-CE (PCL.Core/Model/Homepage/News/NewsItem.cs)

@@ -1,6 +1,6 @@
 //
 //  ResourcePackService.m
-//  Amethyst
+//  Flux
 //
 //  Resource pack service implementation, structured like ShaderService/ModService
 //  The API consistently takes NSString *profileName

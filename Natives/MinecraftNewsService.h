@@ -1,6 +1,6 @@
 //
 //  MinecraftNewsService.h
-//  Amethyst
+//  Flux
 //
 //  Official Minecraft news fetch service
 //  Modelled on PCL-CE (PCL.Core/ViewModel/Homepage/NewsViewModel.cs):

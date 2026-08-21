@@ -1,6 +1,6 @@
 //
 //  DownloadProgressCardView.m
-//  Amethyst
+//  Flux
 //
 //  Implementation of the download progress card view (modelled on the download progress style of FCL/ZL2/HMCL)
 //

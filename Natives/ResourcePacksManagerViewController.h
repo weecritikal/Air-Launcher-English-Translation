@@ -1,6 +1,6 @@
 //
 //  ResourcePacksManagerViewController.h
-//  Amethyst
+//  Flux
 //
 //  Resource pack manager view controller, modelled on ModsManagerViewController
 //  Local/online mode switching, search, enable/disable, delete, import

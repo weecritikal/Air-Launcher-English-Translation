@@ -1,6 +1,6 @@
 //
 //  ShaderVersionViewController.m
-//  Amethyst
+//  Flux
 //
 //  Shader version selection view controller implementation
 //  Refactored: added a side filter panel modeled on the FCL/ZL2 style (download source / version / loader / sort chips)

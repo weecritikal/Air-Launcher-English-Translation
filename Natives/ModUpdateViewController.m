@@ -1,6 +1,6 @@
 //
 //  ModUpdateViewController.m
-//  Amethyst
+//  Flux
 //
 //  Multi-stage task flow page for mod updates/downgrades (Bento Grid + Material Design 3 style)
 //

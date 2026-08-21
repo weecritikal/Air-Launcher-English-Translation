@@ -1,6 +1,6 @@
 //
 //  ModpackExportViewController.m
-//  Amethyst
+//  Flux
 //
 //  Reworked after FCL ExportModpackViewModel / HMCL ModpackExportPanel / ZL2 ModpackExportScreen
 //
@@ -291,7 +291,7 @@
 
     // Prefill
     self.versionField.text = @"1.0";
-    self.authorField.text = @"Amethyst User";
+    self.authorField.text = @"Flux User";
     if (self.selectedProfileName) {
         self.nameField.text = self.selectedProfileName;
     }
@@ -463,7 +463,7 @@
 
     NSString *name = self.nameField.text ?: @"";
     NSString *version = self.versionField.text ?: @"1.0";
-    NSString *author = self.authorField.text ?: @"Amethyst User";
+    NSString *author = self.authorField.text ?: @"Flux User";
     if (name.length == 0) name = self.selectedProfileName;
     if (version.length == 0) version = @"1.0";
 

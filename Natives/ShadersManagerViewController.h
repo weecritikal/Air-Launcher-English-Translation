@@ -1,6 +1,6 @@
 //
 //  ShadersManagerViewController.h
-//  Amethyst
+//  Flux
 //
 //  Main view controller for managing shader packs
 //

@@ -1,6 +1,6 @@
 //
 //  ResourcePackItem.h
-//  Amethyst
+//  Flux
 //
 //  Resource pack model, modelled on ShaderItem with packFormat added (parsed from pack.mcmeta)
 //

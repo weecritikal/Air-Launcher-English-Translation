@@ -1,6 +1,6 @@
 //
 //  InlineMessageView.h
-//  Amethyst
+//  Flux
 //
 //  Modelled on the inline messages of FCL/ZL2, replacing UIAlertController popups
 //  Shows a loading/error/success/info state in the middle of the content area without blocking the user

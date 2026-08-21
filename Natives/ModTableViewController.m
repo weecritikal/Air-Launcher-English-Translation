@@ -1,6 +1,6 @@
 //
 //  ModTableViewController.m
-//  AmethystMods
+//  FluxMods
 //
 //  Updated: ensure the web search switch is placed directly left of refresh and visible reliably.
 //

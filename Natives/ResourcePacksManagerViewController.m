@@ -1,6 +1,6 @@
 //
 //  ResourcePacksManagerViewController.m
-//  Amethyst
+//  Flux
 //
 //  Resource pack manager view controller implementation, modelled on ModsManagerViewController
 //  Uses ResourcePackService for local scanning and downloads

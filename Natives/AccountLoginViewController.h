@@ -1,6 +1,6 @@
 //
 //  AccountLoginViewController.h
-//  Amethyst
+//  Flux
 //
 //  Modelled on the account login screen of FCL (Fold Craft Launcher) for Android:
 //  a card list offering Microsoft / LittleSkin / custom third-party / local sign-in,

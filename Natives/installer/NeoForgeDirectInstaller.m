@@ -1,6 +1,6 @@
 //
 //  NeoForgeDirectInstaller.m
-//  Amethyst
+//  Flux
 //
 //  Direct NeoForge installer (new format only, NeoForge 1.20.1+).
 //

@@ -123,9 +123,9 @@ jobs:
           for f in *-ios.ipa; do case "$f" in *.slimmed-*) ;; *) ipa+=( "$f" );; esac; done
           tipa=( )
           for f in *-ios-trollstore.tipa; do case "$f" in *.slimmed-*) ;; *) tipa+=( "$f" );; esac; done
-          if [ ${#ipa[@]} -gt 0 ]; then mv "${ipa[0]}" air-english.ipa; fi
-          if [ ${#tipa[@]} -gt 0 ]; then mv "${tipa[0]}" air-english.tipa; fi
-          if [ ! -f air-english.ipa ] && [ ! -f air-english.tipa ]; then
+          if [ ${#ipa[@]} -gt 0 ]; then mv "${ipa[0]}" flux.ipa; fi
+          if [ ${#tipa[@]} -gt 0 ]; then mv "${tipa[0]}" flux.tipa; fi
+          if [ ! -f flux.ipa ] && [ ! -f flux.tipa ]; then
             echo "::error::no installable package was produced"; exit 1
           fi
           ls -lh
@@ -134,22 +134,22 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: air-launcher-ios-english
-          path: artifacts/air-english.ipa
+          name: flux-ios
+          path: artifacts/flux.ipa
 
       - name: Upload TrollStore tipa
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: air-launcher-ios-english-trollstore
-          path: artifacts/air-english.tipa
+          name: flux-ios-trollstore
+          path: artifacts/flux.tipa
 
       - name: Upload debug symbols
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: air-launcher-ios-english-dsym
-          path: artifacts/AngelAuraAmethyst.dSYM
+          name: flux-ios-dsym
+          path: artifacts/Flux.dSYM
 
       - name: Publish GitHub Release
         # Only when you explicitly ticked publish_release when starting the run.
@@ -166,5 +166,5 @@ jobs:
             - `.ipa` - install with AltStore / SideStore / Sideloadly
             - `.tipa` - install with TrollStore
           files: |
-            artifacts/air-english.ipa
-            artifacts/air-english.tipa
+            artifacts/flux.ipa
+            artifacts/flux.tipa

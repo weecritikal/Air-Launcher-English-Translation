@@ -1,6 +1,6 @@
 //
 //  ModpackImportService.m
-//  Amethyst
+//  Flux
 //
 //  Modpack import service implementation
 //

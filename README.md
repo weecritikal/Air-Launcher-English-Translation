@@ -1,8 +1,8 @@
 <div align="center">
-  <img src="Natives/Assets.xcassets/AppIcon-Light.appiconset/1024x1024.png" alt="Air Icon" width="120" style="border-radius: 24px;">
+  <img src="Natives/Assets.xcassets/AppIcon-Light.appiconset/1024x1024.png" alt="Flux Icon" width="120" style="border-radius: 24px;">
 </div>
 
-<h1 align="center">Air</h1>
+<h1 align="center">Flux</h1>
 <p align="center"><sub>Amethyst iOS Remastered</sub></p>
 
 <div align="center">
@@ -15,7 +15,7 @@
 
 ---
 
-Air — a Minecraft: Java Edition launcher for iOS and iPadOS. A complete English translation of Amethyst iOS Remastered, a fork of AngelAuraMC's Amethyst iOS by herbrine8403.
+Flux — a Minecraft: Java Edition launcher for iOS and iPadOS. A complete English translation of Amethyst iOS Remastered, a fork of AngelAuraMC's Amethyst iOS by herbrine8403.
 
 > Thanks to both AngelAuraMC and herbrine8403 for their work in their original repositories, I truly admire your work, all credit to you two. I only intend to build on top of it.
 >
@@ -39,14 +39,14 @@ Air — a Minecraft: Java Edition launcher for iOS and iPadOS. A complete Englis
 
 ## Changes in This Fork
 
-Air is versioned independently of upstream, starting at 1.0.0. This release is a fork of [herbrine8403/Amethyst-iOS-MyRemastered](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered), built from its 5.0.0 Preview and synced with upstream through `6514be6`. It adds a complete English translation and fixes several issues that kept the launcher from working. Only substantive changes are listed here -- routine build and tooling fixes are left out.
+Flux is versioned independently of upstream, starting at 1.0.0. This release is a fork of [herbrine8403/Amethyst-iOS-MyRemastered](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered), built from its 5.0.0 Preview and synced with upstream through `6514be6`. It adds a complete English translation and fixes several issues that kept the launcher from working. Only substantive changes are listed here -- routine build and tooling fixes are left out.
 
 ### Translation
 
 - **Chinese is gone from the app.** The Simplified and Traditional Chinese localizations, the Chinese README, and the last Chinese string literals in the sources have been removed, so no code path can render Mandarin. Other languages, Japanese included, are untouched.
 - **Complete English localization.** Upstream ships Mandarin-only. Every user-facing string is now English: 1,313 hardcoded string literals across the Objective-C sources, 19 localization keys that were absent from `en.lproj`, and the in-source comments. The Chinese localization is untouched and still selectable.
 
-- **Its own app icon.** Air ships the green-to-blue hexagon rather than the upstream artwork.
+- **Its own app icon.** Flux ships an abstract interwoven mark on a dark ground, in place of the upstream artwork.
 
 ### Fixes
 
@@ -94,7 +94,7 @@ Air is versioned independently of upstream, starting at 1.0.0. This release is a
 
 ## Quick Start
 
-For complete documentation, refer to the [Amethyst Official Wiki](https://wiki.angelauramc.dev/wiki/getting_started/INSTALL.html#ios) or the [Bilibili tutorial](https://b23.tv/KyxZr12). Below is a condensed guide.
+For complete documentation, refer to the [Flux Official Wiki](https://wiki.angelauramc.dev/wiki/getting_started/INSTALL.html#ios) or the [Bilibili tutorial](https://b23.tv/KyxZr12). Below is a condensed guide.
 
 ### Device Requirements
 

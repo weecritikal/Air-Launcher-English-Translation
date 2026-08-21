@@ -1,6 +1,6 @@
 //
 //  MurmurHash2.m
-//  Amethyst
+//  Flux
 //
 //  MurmurHash2 streaming incremental hash helper (the variant CurseForge uses for file fingerprints)
 //  Reference implementation: MurmurHash2Incremental.kt in ZalithLauncher2

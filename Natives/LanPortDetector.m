@@ -1,6 +1,6 @@
 //
 //  LanPortDetector.m
-//  Amethyst
+//  Flux
 //
 //  Implementation of the Minecraft "Open to LAN" port detector (manual entry version)
 //

@@ -1,6 +1,6 @@
 //
 //  GameMenuOverlayView.h
-//  Amethyst
+//  Flux
 //
 //  Modelled on the floating button design of FCL MenuView and ZL2 GameScreen:
 //  - a draggable round settings button (with its position persisted), replacing the old right-swipe strip

@@ -1,6 +1,6 @@
 //
 //  ModService.m
-//  AmethystMods
+//  FluxMods
 //
 //  Change: added a file modification time cache, greatly speeding up scanning
 //  Change: switched the download session to the default configuration, fixing the slow downloads caused by background session throttling

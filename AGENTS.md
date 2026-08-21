@@ -1,8 +1,8 @@
-# Angel Aura Amethyst (iOS) Remastered - Project Overview
+# Flux (iOS) Remastered - Project Overview
 
 ## Introduction
 
-This is a Minecraft launcher optimized for iOS/iPadOS, developed on top of the official Amethyst project. It aims to provide a smoother gameplay experience, better localization support and enhanced features such as mod management, shader management, modpack importing and smart download source switching.
+This is a Minecraft launcher optimized for iOS/iPadOS, developed on top of the official Flux project. It aims to provide a smoother gameplay experience, better localization support and enhanced features such as mod management, shader management, modpack importing and smart download source switching.
 
 ## Technology Stack and Architecture
 
@@ -52,7 +52,7 @@ This is a Minecraft launcher optimized for iOS/iPadOS, developed on top of the o
     *   `make java`: build the Java application.
     *   `make jre`: download and extract the iOS JRE.
     *   `make assets`: compile the app resources (icons and so on).
-    *   `make payload`: assemble the app bundle (AngelAuraAmethyst.app).
+    *   `make payload`: assemble the app bundle (Flux.app).
     *   `make package`: produce the final `.ipa` or `.tipa` package.
 
 3.  **Optional build parameters**:
@@ -143,7 +143,7 @@ The project uses GitHub Actions for automated builds:
 Build artifacts:
 *   `org.angelauramc.amethyst-ios.ipa`: the standard IPA package
 *   `org.angelauramc.amethyst-ios-trollstore.tipa`: the TrollStore-specific package
-*   `AngelAuraAmethyst.dSYM`: the debug symbol file
+*   `Flux.dSYM`: the debug symbol file
 
 ## Additional Notes
 

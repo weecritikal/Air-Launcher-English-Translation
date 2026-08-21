@@ -1,6 +1,6 @@
 //
 //  MarkdownParser.m
-//  Amethyst
+//  Flux
 //
 
 #import "MarkdownParser.h"

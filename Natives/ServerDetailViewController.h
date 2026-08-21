@@ -1,6 +1,6 @@
 //
 //  ServerDetailViewController.h
-//  Amethyst
+//  Flux
 //
 //  The server detail page:
 //  - the server icon, name and description

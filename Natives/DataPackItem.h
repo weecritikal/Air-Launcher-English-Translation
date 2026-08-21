@@ -1,6 +1,6 @@
 //
 //  DataPackItem.h
-//  Amethyst
+//  Flux
 //
 //  Data pack model, modelled on ShaderItem with packFormat added (parsed from pack.mcmeta)
 //

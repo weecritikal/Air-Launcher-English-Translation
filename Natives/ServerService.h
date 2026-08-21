@@ -1,6 +1,6 @@
 //
 //  ServerService.h
-//  Amethyst
+//  Flux
 //
 //  The server project service layer, following the pattern of ModService/ShaderService:
 //  - wraps the Modrinth and CurseForge source switch

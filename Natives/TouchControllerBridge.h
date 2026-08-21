@@ -1,6 +1,6 @@
 //
 //  TouchControllerBridge.h
-//  Angel Aura Amethyst
+//  Flux
 //
 //  TouchController JNI bridge header
 //  Provides the communication interface between the Minecraft TouchController mod and the iOS launcher

@@ -38,7 +38,7 @@ COMMIT ?= "unknown"
 # e.g. `make all BUNDLE_ID=com.yourname.air`. Capabilities such as Increased Memory Limit
 # are attached to a specific App ID, so signing with your own profile needs a bundle id
 # you actually own.
-BUNDLE_ID ?= com.air-devs.air
+BUNDLE_ID ?= com.weecritikal.flux
 SIGNING_TEAMID ?= -1
 TEAMID ?= -1
 PROVISIONING ?= -1
@@ -75,7 +75,7 @@ IOS         := 0
 BOOTJDK     ?= /usr/bin
 $(warning Building on Linux. Note that all targets may not compile or require external components.)
 else
-$(error This platform is not currently supported for building Angel Aura Amethyst.)
+$(error This platform is not currently supported for building Flux.)
 endif
 
 # Define PLATFORM_NAME from PLATFORM
@@ -104,7 +104,7 @@ else
 $(error PLATFORM is not valid.)
 endif
 
-POJAV_BUNDLE_DIR      ?= $(OUTPUTDIR)/AngelAuraAmethyst.app
+POJAV_BUNDLE_DIR      ?= $(OUTPUTDIR)/Flux.app
 POJAV_JRE8_DIR        ?= $(SOURCEDIR)/depends/java-8-openjdk
 POJAV_JRE17_DIR       ?= $(SOURCEDIR)/depends/java-17-openjdk
 POJAV_JRE21_DIR       ?= $(SOURCEDIR)/depends/java-21-openjdk
@@ -156,7 +156,7 @@ METHOD_PACKAGE = \
 		zip --symlinks -r $(OUTPUTDIR)/$(BUNDLE_ID)-$(VERSION)-$(PLATFORM_NAME)$$IPA_SUFFIX Payload; \
 	fi; \
 	if [ '$(SLIMMED)' = '1' ] || [ '$(SLIMMED_ONLY)' = '1' ]; then \
-		zip --symlinks -r $(OUTPUTDIR)/$(BUNDLE_ID).slimmed-$(VERSION)-$(PLATFORM_NAME)$$IPA_SUFFIX Payload --exclude='Payload/AngelAuraAmethyst.app/java_runtimes/*'; \
+		zip --symlinks -r $(OUTPUTDIR)/$(BUNDLE_ID).slimmed-$(VERSION)-$(PLATFORM_NAME)$$IPA_SUFFIX Payload --exclude='Payload/Flux.app/java_runtimes/*'; \
 	fi
 
 # Function to download and unpack Java runtimes.
@@ -241,7 +241,7 @@ endif
 all: clean native java jre assets payload package dsym
 
 help:
-	echo 'Makefile to compile Angel Aura Amethyst'
+	echo 'Makefile to compile Flux'
 	echo ''
 	echo 'Usage:'
 	echo '    make                                Makes everything under all'
@@ -251,8 +251,8 @@ help:
 	echo '    make java                           Builds the Java app'
 	echo '    make jre                            Downloads/unpacks the iOS JREs'
 	echo '    make assets                         Compiles Assets.xcassets'
-	echo '    make payload                        Makes Payload/AngelAuraAmethyst.app'
-	echo '    make package                        Builds ipa of Angel Aura Amethyst'
+	echo '    make payload                        Makes Payload/Flux.app'
+	echo '    make package                        Builds ipa of Flux'
 	echo '    make deploy                         Copies files to local iDevice'
 	echo '    make dsym                           Generate debug symbol files'
 	echo '    make clean                          Cleans build directories'
@@ -266,7 +266,7 @@ check:
 	)
 
 native: dep_mg
-	echo '[Amethyst v$(VERSION)] native - start'
+	echo '[Flux v$(VERSION)] native - start'
 	mkdir -p $(WORKINGDIR)
 	cd $(WORKINGDIR) && cmake \
 		-DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) \
@@ -283,17 +283,17 @@ native: dep_mg
 		..
 
 	cmake --build $(WORKINGDIR) --config $(CMAKE_BUILD_TYPE) -j$(JOBS)
-	#	--target awt_headless awt_xawt libOSMesaOverride.dylib tinygl4angle AngelAuraAmethyst
+	#	--target awt_headless awt_xawt libOSMesaOverride.dylib tinygl4angle Flux
 	rm $(WORKINGDIR)/libawt_headless.dylib
-	echo '[Amethyst v$(VERSION)] native - end'
+	echo '[Flux v$(VERSION)] native - end'
 
 java:
-	echo '[Amethyst v$(VERSION)] java - start'
+	echo '[Flux v$(VERSION)] java - start'
 	$(MAKE) -C JavaApp -j$(JOBS) BOOTJDK=$(BOOTJDK)
-	echo '[Amethyst v$(VERSION)] java - end'
+	echo '[Flux v$(VERSION)] java - end'
 
 jre: native
-	echo '[Amethyst v$(VERSION)] jre - start'
+	echo '[Flux v$(VERSION)] jre - start'
 	mkdir -p $(SOURCEDIR)/depends
 	cd $(SOURCEDIR)/depends; \
 	$(call METHOD_JAVA_UNPACK,8,'https://assets.angelauramc.dev/openjdk/ios-arm64/jre8-ios-aarch64.zip'); \
@@ -312,10 +312,10 @@ jre: native
 	cp $(WORKINGDIR)/libawt_xawt.dylib $(OUTPUTDIR)/java_runtimes/java-17-openjdk/lib;
 	cp $(WORKINGDIR)/libawt_xawt.dylib $(OUTPUTDIR)/java_runtimes/java-21-openjdk/lib
 	cp $(WORKINGDIR)/libawt_xawt.dylib $(OUTPUTDIR)/java_runtimes/java-25-openjdk/lib
-	echo '[Amethyst v$(VERSION)] jre - end'
+	echo '[Flux v$(VERSION)] jre - end'
 
 dep_mg:
-	echo '[Amethyst v$(VERSION)] dep_mg - start'
+	echo '[Flux v$(VERSION)] dep_mg - start'
 	mkdir -p $(WORKINGDIR)/mobileglues
 	cd $(WORKINGDIR)/mobileglues && cmake \
 		-DMACOS="1" \
@@ -332,7 +332,7 @@ dep_mg:
 	cmake --build $(WORKINGDIR)/mobileglues --config RelWithDebInfo -j$(JOBS) --target mobileglues
 	cp $(WORKINGDIR)/mobileglues/libmobileglues*.dylib $(WORKINGDIR)/
 	cp $(WORKINGDIR)/mobileglues/libspirv-cross*.dylib $(WORKINGDIR)/ 2>/dev/null || true
-	echo '[Amethyst v$(VERSION)] dep_mg - end'
+	echo '[Flux v$(VERSION)] dep_mg - end'
 
 dep_mobilegl:
 	# MobileGL (the Vulkan/GLES backend renderer) integration has been removed entirely:
@@ -340,12 +340,12 @@ dep_mobilegl:
 	# - libMobileGL.dylib / libMobileGL-gles.dylib are no longer built or packaged
 	# - the MobileGL renderer option is no longer offered at runtime
 	# The empty target is kept so external make invocations do not error out (payload no longer depends on it)
-	@echo '[Amethyst v$(VERSION)] dep_mobilegl - skipped (MobileGL removed)'
+	@echo '[Flux v$(VERSION)] dep_mobilegl - skipped (MobileGL removed)'
 
 assets:
-	echo '[Amethyst v$(VERSION)] assets - start'
+	echo '[Flux v$(VERSION)] assets - start'
 	if [ '$(IOS)' = '0' ] && [ '$(DETECTPLAT)' = 'Darwin' ]; then \
-		mkdir -p $(WORKINGDIR)/AngelAuraAmethyst.app/Base.lproj; \
+		mkdir -p $(WORKINGDIR)/Flux.app/Base.lproj; \
 		xcrun actool $(SOURCEDIR)/Natives/Assets.xcassets \
 			--compile $(SOURCEDIR)/Natives/resources \
 			--platform iphoneos \
@@ -353,64 +353,65 @@ assets:
 			--app-icon AppIcon-Light \
 			--output-partial-info-plist /dev/null || exit 1; \
 	else \
-		echo 'Due to the required tools not being available, you cannot compile the extras for Angel Aura Amethyst with an iOS device.'; \
+		echo 'Due to the required tools not being available, you cannot compile the extras for Flux with an iOS device.'; \
 	fi
-	echo '[Amethyst v$(VERSION)] assets - end'
+	echo '[Flux v$(VERSION)] assets - end'
 
 payload: native dep_mg java jre assets
-	echo '[Amethyst v$(VERSION)] payload - start'
-	$(call METHOD_DIRCHECK,$(WORKINGDIR)/AngelAuraAmethyst.app/libs)
-	$(call METHOD_DIRCHECK,$(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo)
-	$(call METHOD_DIRCHECK,$(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo17)
-	cp -R $(SOURCEDIR)/Natives/resources/en.lproj/LaunchScreen.storyboardc $(WORKINGDIR)/AngelAuraAmethyst.app/Base.lproj/ || exit 1
-	cp -R $(SOURCEDIR)/Natives/resources/* $(WORKINGDIR)/AngelAuraAmethyst.app/ || exit 1
-	cp $(WORKINGDIR)/*.dylib $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/ || exit 1
+	echo '[Flux v$(VERSION)] payload - start'
+	$(call METHOD_DIRCHECK,$(WORKINGDIR)/Flux.app/libs)
+	$(call METHOD_DIRCHECK,$(WORKINGDIR)/Flux.app/libs_caciocavallo)
+	$(call METHOD_DIRCHECK,$(WORKINGDIR)/Flux.app/libs_caciocavallo17)
+	cp -R $(SOURCEDIR)/Natives/resources/en.lproj/LaunchScreen.storyboardc $(WORKINGDIR)/Flux.app/Base.lproj/ || exit 1
+	cp -R $(SOURCEDIR)/Natives/resources/* $(WORKINGDIR)/Flux.app/ || exit 1
+	cp $(WORKINGDIR)/*.dylib $(WORKINGDIR)/Flux.app/Frameworks/ || exit 1
 	# spirv-cross symlink (a defensive fallback): if the MobileGlues build produces libspirv-cross-c-shared.0.dylib,
 	# create a libspirv-cross.dylib symlink for native code that loads it under the default macOS name.
-	if [ -f "$(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libspirv-cross-c-shared.0.dylib" ] && [ ! -f "$(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libspirv-cross.dylib" ]; then \
-		ln -sf libspirv-cross-c-shared.0.dylib $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libspirv-cross.dylib; \
+	if [ -f "$(WORKINGDIR)/Flux.app/Frameworks/libspirv-cross-c-shared.0.dylib" ] && [ ! -f "$(WORKINGDIR)/Flux.app/Frameworks/libspirv-cross.dylib" ]; then \
+		ln -sf libspirv-cross-c-shared.0.dylib $(WORKINGDIR)/Flux.app/Frameworks/libspirv-cross.dylib; \
 	fi
-		cp -R $(SOURCEDIR)/JavaApp/libs/others/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs/ || exit 1
-	cp $(SOURCEDIR)/JavaApp/build/*.jar $(WORKINGDIR)/AngelAuraAmethyst.app/libs/ || exit 1
-	cp -R $(SOURCEDIR)/JavaApp/libs/caciocavallo/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo || exit 1
-	cp -R $(SOURCEDIR)/JavaApp/libs/caciocavallo17/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo17 || exit 1
+		cp -R $(SOURCEDIR)/JavaApp/libs/others/* $(WORKINGDIR)/Flux.app/libs/ || exit 1
+	cp $(SOURCEDIR)/JavaApp/build/*.jar $(WORKINGDIR)/Flux.app/libs/ || exit 1
+	cp -R $(SOURCEDIR)/JavaApp/libs/caciocavallo/* $(WORKINGDIR)/Flux.app/libs_caciocavallo || exit 1
+	cp -R $(SOURCEDIR)/JavaApp/libs/caciocavallo17/* $(WORKINGDIR)/Flux.app/libs_caciocavallo17 || exit 1
 	# Copy TouchController static library if available
 	if [ -f "$(SOURCEDIR)/TouchController/libproxy_server_ios.a" ]; then \
-		mkdir -p $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks; \
-		cp $(SOURCEDIR)/TouchController/libproxy_server_ios.a $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/ || exit 1; \
-		echo '[Amethyst v$(VERSION)] Copied TouchController device library'; \
+		mkdir -p $(WORKINGDIR)/Flux.app/Frameworks; \
+		cp $(SOURCEDIR)/TouchController/libproxy_server_ios.a $(WORKINGDIR)/Flux.app/Frameworks/ || exit 1; \
+		echo '[Flux v$(VERSION)] Copied TouchController device library'; \
 	elif [ -f "$(SOURCEDIR)/TouchController/libproxy_server_ios_simulator.a" ]; then \
-		mkdir -p $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks; \
-		cp $(SOURCEDIR)/TouchController/libproxy_server_ios_simulator.a $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/ || exit 1; \
-		echo '[Amethyst v$(VERSION)] Copied TouchController simulator library'; \
+		mkdir -p $(WORKINGDIR)/Flux.app/Frameworks; \
+		cp $(SOURCEDIR)/TouchController/libproxy_server_ios_simulator.a $(WORKINGDIR)/Flux.app/Frameworks/ || exit 1; \
+		echo '[Flux v$(VERSION)] Copied TouchController simulator library'; \
 	else \
-		echo '[Amethyst v$(VERSION)] TouchController library not found, skipping'; \
+		echo '[Flux v$(VERSION)] TouchController library not found, skipping'; \
 	fi
 	$(call METHOD_DIRCHECK,$(OUTPUTDIR)/Payload)
-	cp -R $(WORKINGDIR)/AngelAuraAmethyst.app $(OUTPUTDIR)/Payload
+	cp -R $(WORKINGDIR)/Flux.app $(OUTPUTDIR)/Payload
 	if [ '$(SLIMMED_ONLY)' != '1' ]; then \
-		cp -R $(OUTPUTDIR)/java_runtimes $(OUTPUTDIR)/Payload/AngelAuraAmethyst.app; \
+		cp -R $(OUTPUTDIR)/java_runtimes $(OUTPUTDIR)/Payload/Flux.app; \
 	fi
-	# Apply BUNDLE_ID. The app ships with com.air-devs.air, which belongs to someone else;
-	# signing with your own provisioning profile requires an App ID you own. Rewrite the
-	# built bundle and derive matching entitlements rather than editing tracked sources.
-	if [ '$(BUNDLE_ID)' != 'com.air-devs.air' ]; then \
+	# Apply BUNDLE_ID. Signing with a provisioning profile requires an App ID that the
+	# profile actually authorises, so anyone building under a different Apple team has to
+	# override this. Rewrite the built bundle and derive matching entitlements rather than
+	# editing tracked sources.
+	if [ '$(BUNDLE_ID)' != 'com.weecritikal.flux' ]; then \
 		echo 'Rebranding bundle identifier to $(BUNDLE_ID)'; \
-		/usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier $(BUNDLE_ID)' $(OUTPUTDIR)/Payload/AngelAuraAmethyst.app/Info.plist; \
-		/usr/libexec/PlistBuddy -c 'Set :CFBundleURLTypes:0:CFBundleURLName $(BUNDLE_ID).urlscheme' $(OUTPUTDIR)/Payload/AngelAuraAmethyst.app/Info.plist || true; \
-		sed 's/com\.air-devs\.air/$(BUNDLE_ID)/g' $(SOURCEDIR)/entitlements.sideload.xml > $(OUTPUTDIR)/entitlements.sideload.xml; \
-		sed 's/com\.air-devs\.air/$(BUNDLE_ID)/g' $(SOURCEDIR)/entitlements.trollstore.xml > $(OUTPUTDIR)/entitlements.trollstore.xml; \
+		/usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier $(BUNDLE_ID)' $(OUTPUTDIR)/Payload/Flux.app/Info.plist; \
+		/usr/libexec/PlistBuddy -c 'Set :CFBundleURLTypes:0:CFBundleURLName $(BUNDLE_ID).urlscheme' $(OUTPUTDIR)/Payload/Flux.app/Info.plist || true; \
+		sed 's/com\.weecritikal\.flux/$(BUNDLE_ID)/g' $(SOURCEDIR)/entitlements.sideload.xml > $(OUTPUTDIR)/entitlements.sideload.xml; \
+		sed 's/com\.weecritikal\.flux/$(BUNDLE_ID)/g' $(SOURCEDIR)/entitlements.trollstore.xml > $(OUTPUTDIR)/entitlements.trollstore.xml; \
 	else \
 		cp $(SOURCEDIR)/entitlements.sideload.xml $(OUTPUTDIR)/entitlements.sideload.xml; \
 		cp $(SOURCEDIR)/entitlements.trollstore.xml $(OUTPUTDIR)/entitlements.trollstore.xml; \
 	fi
-	ldid -S $(OUTPUTDIR)/Payload/AngelAuraAmethyst.app; \
+	ldid -S $(OUTPUTDIR)/Payload/Flux.app; \
 	if [ '$(TROLLSTORE_JIT_ENT)' == '1' ]; then \
-		ldid -S$(OUTPUTDIR)/entitlements.trollstore.xml $(OUTPUTDIR)/Payload/AngelAuraAmethyst.app/AngelAuraAmethyst; \
+		ldid -S$(OUTPUTDIR)/entitlements.trollstore.xml $(OUTPUTDIR)/Payload/Flux.app/Flux; \
 	elif [ '$(PLATFORM)' == '6' ]; then \
-		ldid -S$(SOURCEDIR)/entitlements.codesign.xml $(OUTPUTDIR)/Payload/AngelAuraAmethyst.app/AngelAuraAmethyst; \
+		ldid -S$(SOURCEDIR)/entitlements.codesign.xml $(OUTPUTDIR)/Payload/Flux.app/Flux; \
 	else \
-		ldid -S$(OUTPUTDIR)/entitlements.sideload.xml $(OUTPUTDIR)/Payload/AngelAuraAmethyst.app/AngelAuraAmethyst; \
+		ldid -S$(OUTPUTDIR)/entitlements.sideload.xml $(OUTPUTDIR)/Payload/Flux.app/Flux; \
 	fi
 	chmod -R 755 $(OUTPUTDIR)/Payload
 	# Always re-tag the platform (aligned with the Ynnyny repository) - this is idempotent for Mach-O binaries already tagged for iOS,
@@ -418,21 +419,21 @@ payload: native dep_mg java jre assets
 	# platform=macos; iOS dyld silently refuses to load those, making LWJGL throw an UnsatisfiedLinkError.
 	# The [ PLATFORM != 2 ] guard used originally assumed every committed dylib was already tagged for iOS,
 	# and that assumption broke when the top-level dylibs from Ynnyny were synced in.
-	$(call METHOD_MACHO,$(OUTPUTDIR)/Payload/AngelAuraAmethyst.app,$(call METHOD_CHANGE_PLAT,$(PLATFORM),$$file)); \
+	$(call METHOD_MACHO,$(OUTPUTDIR)/Payload/Flux.app,$(call METHOD_CHANGE_PLAT,$(PLATFORM),$$file)); \
 	$(call METHOD_MACHO,$(OUTPUTDIR)/java_runtimes,$(call METHOD_CHANGE_PLAT,$(PLATFORM),$$file));
-	echo '[Amethyst v$(VERSION)] payload - end'
+	echo '[Flux v$(VERSION)] payload - end'
 
 deploy:
-	echo '[Amethyst v$(VERSION)] deploy - start'
+	echo '[Flux v$(VERSION)] deploy - start'
 	cd $(OUTPUTDIR); \
 	if [ '$(IOS)' = '1' ]; then \
-		ldid -S $(WORKINGDIR)/AngelAuraAmethyst.app || exit 1; \
-		ldid -S$(SOURCEDIR)/entitlements.trollstore.xml $(WORKINGDIR)/AngelAuraAmethyst.app/AngelAuraAmethyst || exit 1; \
-		sudo mv $(WORKINGDIR)/*.dylib $(PREFIX)Applications/AngelAuraAmethyst.app/Frameworks/ || exit 1; \
-		sudo mv $(WORKINGDIR)/AngelAuraAmethyst.app/AngelAuraAmethyst $(PREFIX)Applications/AngelAuraAmethyst.app/AngelAuraAmethyst || exit 1; \
-		sudo mv $(SOURCEDIR)/JavaApp/build/*.jar $(PREFIX)Applications/AngelAuraAmethyst.app/libs/ || exit 1; \
-		cd $(PREFIX)Applications/AngelAuraAmethyst.app/Frameworks || exit 1; \
-		sudo chown -R 501:501 $(PREFIX)Applications/AngelAuraAmethyst.app/* || exit 1; \
+		ldid -S $(WORKINGDIR)/Flux.app || exit 1; \
+		ldid -S$(SOURCEDIR)/entitlements.trollstore.xml $(WORKINGDIR)/Flux.app/Flux || exit 1; \
+		sudo mv $(WORKINGDIR)/*.dylib $(PREFIX)Applications/Flux.app/Frameworks/ || exit 1; \
+		sudo mv $(WORKINGDIR)/Flux.app/Flux $(PREFIX)Applications/Flux.app/Flux || exit 1; \
+		sudo mv $(SOURCEDIR)/JavaApp/build/*.jar $(PREFIX)Applications/Flux.app/libs/ || exit 1; \
+		cd $(PREFIX)Applications/Flux.app/Frameworks || exit 1; \
+		sudo chown -R 501:501 $(PREFIX)Applications/Flux.app/* || exit 1; \
 	elif [ '$(IOS)' = '0' ] && [ '$(DETECTPLAT)' = 'Darwin' ]; then \
 		if [ '$(PLATFORM)' != '2' ] || [ '$(TEAMID)' = '-1' ] || [ '$(SIGNING_TEAMID)' = '-1' ] || [ '$(PROVISIONING)' = '-1' ]; then \
 			echo 'Configuration not supported for deploy recipe.'; \
@@ -447,10 +448,10 @@ deploy:
 	else \
 		echo 'Device not supported for deploy recipe.'; \
 	fi
-	echo '[Amethyst v$(VERSION)] deploy - end'
+	echo '[Flux v$(VERSION)] deploy - end'
 
 package: payload
-	echo '[Amethyst v$(VERSION)] package - start'
+	echo '[Flux v$(VERSION)] package - start'
 	if [ '$(TEAMID)' != '-1' ] && [ '$(SIGNING_TEAMID)' != '-1' ] && [ -f '$(PROVISIONING)' ] && [ '$(DETECTPLAT)' = 'Darwin' ]; then \
 		printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n	<key>application-identifier</key>\n	<string>$(TEAMID).$(BUNDLE_ID)</string>\n	<key>com.apple.developer.team-identifier</key>\n	<string>$(TEAMID)</string>\n	<key>get-task-allow</key>\n	<true/>\n	<key>keychain-access-groups</key>\n	<array>\n	<string>$(TEAMID).*</string>\n	<string>com.apple.token</string>\n	</array>\n	<key>com.apple.developer.kernel.extended-virtual-addressing</key>\n	<true/>\n	<key>com.apple.developer.kernel.increased-memory-limit</key>\n	<true/>\n</dict>\n</plist>' > entitlements.codesign.xml; \
 		$(MAKE) codesign; \
@@ -461,27 +462,27 @@ package: payload
 	cd $(OUTPUTDIR); \
 	$(call METHOD_PACKAGE); \
 	zip --symlinks -r $(OUTPUTDIR)/java_runtimes.zip java_runtimes; \
-	echo '[Amethyst v$(VERSION)] package - end'
+	echo '[Flux v$(VERSION)] package - end'
 
 dsym: payload
-	echo '[Amethyst v$(VERSION)] dsym - start'
-	dsymutil --arch arm64 $(OUTPUTDIR)/Payload/AngelAuraAmethyst.app/AngelAuraAmethyst; \
-	rm -rf $(OUTPUTDIR)/AngelAuraAmethyst.dSYM; \
-	mv $(OUTPUTDIR)/Payload/AngelAuraAmethyst.app/AngelAuraAmethyst.dSYM $(OUTPUTDIR)/AngelAuraAmethyst.dSYM
-	echo '[Amethyst v$(VERSION)] dsym - end'
+	echo '[Flux v$(VERSION)] dsym - start'
+	dsymutil --arch arm64 $(OUTPUTDIR)/Payload/Flux.app/Flux; \
+	rm -rf $(OUTPUTDIR)/Flux.dSYM; \
+	mv $(OUTPUTDIR)/Payload/Flux.app/Flux.dSYM $(OUTPUTDIR)/Flux.dSYM
+	echo '[Flux v$(VERSION)] dsym - end'
 	
 codesign:
-	echo '[Amethyst v$(VERSION)] codesign - start'
-	cp '$(PROVISIONING)' $(OUTPUTDIR)/Payload/AngelAuraAmethyst.app/embedded.mobileprovision
-	$(call METHOD_MACHO,$(OUTPUTDIR)/Payload/AngelAuraAmethyst.app,$(call METHOD_CODESIGN,$(SIGNING_TEAMID),$$file))
+	echo '[Flux v$(VERSION)] codesign - start'
+	cp '$(PROVISIONING)' $(OUTPUTDIR)/Payload/Flux.app/embedded.mobileprovision
+	$(call METHOD_MACHO,$(OUTPUTDIR)/Payload/Flux.app,$(call METHOD_CODESIGN,$(SIGNING_TEAMID),$$file))
 	$(call METHOD_MACHO,$(OUTPUTDIR)/java_runtimes,$(call METHOD_CODESIGN,$(SIGNING_TEAMID),$$file))
-	echo '[Amethyst v$(VERSION)] codesign - end'
+	echo '[Flux v$(VERSION)] codesign - end'
 
 clean:
-	echo '[Amethyst v$(VERSION)] clean - start'
+	echo '[Flux v$(VERSION)] clean - start'
 	rm -rf $(WORKINGDIR)
 	rm -rf JavaApp/build
 	rm -rf $(OUTPUTDIR)
-	echo '[Amethyst v$(VERSION)] clean - end'
+	echo '[Flux v$(VERSION)] clean - end'
 
 .PHONY: all clean check native java jre package dsym deploy help

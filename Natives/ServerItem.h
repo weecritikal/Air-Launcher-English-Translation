@@ -1,6 +1,6 @@
 //
 //  ServerItem.h
-//  Amethyst
+//  Flux
 //
 //  The server project model, following the design of ModItem:
 //  it can carry either Modrinth server projects (project_type=server)

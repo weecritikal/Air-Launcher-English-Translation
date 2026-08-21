@@ -1,6 +1,6 @@
 //
 //  ShadersManagerViewController.m
-//  Amethyst
+//  Flux
 //
 //  Shader manager implementation - mirrors ModsManagerViewController
 //

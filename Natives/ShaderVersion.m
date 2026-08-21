@@ -1,6 +1,6 @@
 //
 //  ShaderVersion.m
-//  Amethyst
+//  Flux
 //
 //  Shader version model implementation
 //

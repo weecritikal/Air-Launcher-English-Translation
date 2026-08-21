@@ -94,7 +94,7 @@ typedef struct {
 } context_t;
 
 /*
- * iOS 移植：用 pthread_key_t 替代 thread_local（Angel Aura Amethyst）
+ * iOS 移植：用 pthread_key_t 替代 thread_local（Flux）
  * - ltw_get_current_context / ltw_set_current_context 在 egl.c 中实现
  * - current_context 宏让 LTW 现有代码无需改动即可使用
  */

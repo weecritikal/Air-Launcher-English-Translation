@@ -1,6 +1,6 @@
 //
 //  ShaderVersion.h
-//  Amethyst
+//  Flux
 //
 //  Shader version model for shader downloads
 //

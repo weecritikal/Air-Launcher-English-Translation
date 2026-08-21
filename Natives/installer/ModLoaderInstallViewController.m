@@ -1,6 +1,6 @@
 //
 //  ModLoaderInstallViewController.m
-//  Amethyst
+//  Flux
 //
 //  Rebuilt after FCL (FoldCraftLauncher) page_installer.xml + view_installer_item.xml.
 //  - A compact toolbar at the top: the version name field + a download icon button in the top-right corner (replacing the old 72pt button at the bottom)

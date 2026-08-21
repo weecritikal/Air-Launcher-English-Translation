@@ -1,6 +1,6 @@
 //
 //  ServerListViewController.m
-//  Amethyst
+//  Flux
 //
 
 #import "ServerListViewController.h"

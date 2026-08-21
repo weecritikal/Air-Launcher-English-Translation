@@ -1,6 +1,6 @@
 //
 //  SOCKS5Proxy.h
-//  Angel Aura Amethyst
+//  Flux
 //
 //  A local SOCKS5 proxy server
 //

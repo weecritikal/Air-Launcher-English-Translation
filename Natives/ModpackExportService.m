@@ -139,7 +139,7 @@
                        progress:(void (^_Nullable)(double progress, NSString *stageMessage))progress
                           error:(NSError **)error {
     if (error) *error = nil;
-    NSString *resolvedAuthor = author.length > 0 ? author : @"Amethyst User";
+    NSString *resolvedAuthor = author.length > 0 ? author : @"Flux User";
 
     void (^reportProgress)(double, NSString *) = ^(double p, NSString *msg) {
         NSLog(@"[ModpackExport] Progress: %.2f - %@", p, msg);
@@ -432,7 +432,7 @@
         @"manifestVersion": @(1),
         @"name": name.length > 0 ? name : @"Exported Modpack",
         @"version": version.length > 0 ? version : @"1.0",
-        @"author": author.length > 0 ? author : @"Amethyst User",
+        @"author": author.length > 0 ? author : @"Flux User",
         @"files": @[],
         @"overrides": @"overrides"
     };
@@ -561,7 +561,7 @@
     NSMutableString *cfgContent = [NSMutableString string];
     [cfgContent appendFormat:@"InstanceType=OneSix\n"];
     [cfgContent appendFormat:@"name=%@\n", instanceName];
-    [cfgContent appendFormat:@"%s=%@\n", "notes", [NSString stringWithFormat:@"Exported by Amethyst v%@", version.length > 0 ? version : @"1.0"]];
+    [cfgContent appendFormat:@"%s=%@\n", "notes", [NSString stringWithFormat:@"Exported by Flux v%@", version.length > 0 ? version : @"1.0"]];
     [cfgContent appendFormat:@"%s=%@\n", "iconKey", "default"];
     [cfgContent appendFormat:@"%s=%@\n", "OverrideCommands", "false"];
     [cfgContent appendFormat:@"%s=%@\n", "OverrideConsole", "false"];
@@ -646,7 +646,7 @@
 
     // Write .minecraft/AMETHYST_INFO.txt with metadata (optional, helping other launchers identify where it came from)
     NSString *infoContent = [NSString stringWithFormat:
-        @"Amethyst Exported Modpack\n"
+        @"Flux Exported Modpack\n"
         @"Minecraft: %@\n"
         @"Loader: %@ %@\n"
         @"Export Time: %@\n",

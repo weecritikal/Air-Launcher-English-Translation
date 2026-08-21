@@ -1,6 +1,6 @@
 //
 //  ModTableViewController.h
-//  AmethystMods
+//  FluxMods
 //
 //
 

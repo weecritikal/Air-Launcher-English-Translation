@@ -1,6 +1,6 @@
 //
 //  DataPacksManagerViewController.m
-//  Amethyst
+//  Flux
 //
 //  Data pack manager view controller implementation, modelled on ModsManagerViewController
 //  Uses DataPackService for local scanning and downloads

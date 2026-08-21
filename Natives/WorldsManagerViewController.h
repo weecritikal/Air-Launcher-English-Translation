@@ -1,6 +1,6 @@
 //
 //  WorldsManagerViewController.h
-//  Amethyst
+//  Flux
 //
 //  World save management view controller, modeled on ModsManagerViewController
 //  Scans the saves/ directory, deletes worlds and imports world zips (with robust extraction)

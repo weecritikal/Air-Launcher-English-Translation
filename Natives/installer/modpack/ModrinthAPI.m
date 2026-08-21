@@ -157,7 +157,7 @@
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.timeoutInterval = 30.0;
     [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
-    [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
+    [request setValue:@"Flux-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
 
     NSURLSession *session = [NSURLSession sharedSession];
     NSURLSessionDataTask *task = [session dataTaskWithRequest:request
@@ -315,7 +315,7 @@
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.timeoutInterval = 30.0;
     [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
-    [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
+    [request setValue:@"Flux-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
     
     NSURLSession *session = [NSURLSession sharedSession];
     NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
@@ -367,7 +367,7 @@
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.timeoutInterval = 30.0;
     [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
-    [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
+    [request setValue:@"Flux-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
     
     NSURLSession *session = [NSURLSession sharedSession];
     NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
@@ -417,7 +417,7 @@
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.timeoutInterval = 30.0;
     [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
-    [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
+    [request setValue:@"Flux-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
 
     NSURLSession *session = [NSURLSession sharedSession];
     NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
@@ -481,7 +481,7 @@
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.timeoutInterval = 30.0;
     [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
-    [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
+    [request setValue:@"Flux-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
 
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) { if (completion) completion(nil, error); return; }
@@ -559,7 +559,7 @@
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.timeoutInterval = 30.0;
     [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
-    [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
+    [request setValue:@"Flux-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
 
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) { if (completion) completion(nil, error); return; }

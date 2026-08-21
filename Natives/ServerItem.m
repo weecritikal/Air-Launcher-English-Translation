@@ -1,6 +1,6 @@
 //
 //  ServerItem.m
-//  Amethyst
+//  Flux
 //
 
 #import "ServerItem.h"

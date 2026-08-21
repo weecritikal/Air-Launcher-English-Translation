@@ -1,6 +1,6 @@
 //
 //  AssetDetailHeaderView.h
-//  Amethyst
+//  Flux
 //
 //  Header view for the asset detail page (modelled on the project detail header in FCL/ZL2)
 //

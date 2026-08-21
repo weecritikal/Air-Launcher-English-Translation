@@ -1,6 +1,6 @@
 //
 //  ServerListViewController.h
-//  Amethyst
+//  Flux
 //
 //  The server list page, following the UI pattern of ModpackInstallViewController:
 //  - a source switch at the top (Modrinth / CurseForge)

@@ -1,6 +1,6 @@
 //
 //  AnnouncementItem.m
-//  Amethyst
+//  Flux
 //
 
 #import "AnnouncementItem.h"

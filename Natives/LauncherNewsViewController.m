@@ -1370,7 +1370,7 @@ static NSString *festivalGreeting(void) {
     NSString *currentVersion = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];
     
     if ([currentVersion rangeOfString:@"Preview" options:NSCaseInsensitiveSearch].location != NSNotFound) {
-        self.announcementText = @"Welcome to the Amethyst iOS Remastered beta!";
+        self.announcementText = @"Welcome to the Flux iOS Remastered beta!";
         self.hasUpdate = NO;
         [self reloadAnnouncementSection];
         return;
@@ -1383,7 +1383,7 @@ static NSString *festivalGreeting(void) {
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error || ((NSHTTPURLResponse *)response).statusCode != 200 || !data) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                self.announcementText = @"Welcome to Amethyst iOS Remastered!";
+                self.announcementText = @"Welcome to Flux iOS Remastered!";
                 self.hasUpdate = NO;
                 [self reloadAnnouncementSection];
             });
@@ -1395,7 +1395,7 @@ static NSString *festivalGreeting(void) {
         
         if (!latestVer) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                self.announcementText = @"Welcome to Amethyst iOS Remastered!";
+                self.announcementText = @"Welcome to Flux iOS Remastered!";
                 self.hasUpdate = NO;
                 [self reloadAnnouncementSection];
             });
@@ -1413,7 +1413,7 @@ static NSString *festivalGreeting(void) {
                 self.latestVersion = latestVer;
                 self.hasUpdate = YES;
             } else {
-                self.announcementText = @"Welcome to Amethyst iOS Remastered! You're on the latest version.";
+                self.announcementText = @"Welcome to Flux iOS Remastered! You're on the latest version.";
                 self.hasUpdate = NO;
             }
             [self reloadAnnouncementSection];

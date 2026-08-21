@@ -1,6 +1,6 @@
 //
 //  BackgroundSettingsViewController.m
-//  Amethyst
+//  Flux
 //
 //  Background wallpaper settings implementation
 //

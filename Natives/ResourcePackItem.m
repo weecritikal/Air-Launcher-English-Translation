@@ -1,6 +1,6 @@
 //
 //  ResourcePackItem.m
-//  Amethyst
+//  Flux
 //
 //  Resource pack model implementation
 //

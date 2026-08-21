@@ -1,6 +1,6 @@
 //
 //  BackgroundManager.h
-//  Amethyst
+//  Flux
 //
 //  Background wallpaper manager - Global support for all view controllers
 //

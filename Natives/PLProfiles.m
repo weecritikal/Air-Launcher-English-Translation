@@ -1,6 +1,6 @@
 //
 //  PLProfiles.m
-//  Amethyst
+//  Flux
 //
 //  Profile manager with JSON-safe save
 //

@@ -1,6 +1,6 @@
 //
 //  ModpackImportViewController.h
-//  Amethyst
+//  Flux
 //
 //  Modpack import view controller
 //

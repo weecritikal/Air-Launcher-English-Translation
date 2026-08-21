@@ -1,6 +1,6 @@
 //
 //  GameMenuOverlayView.m
-//  Amethyst
+//  Flux
 //
 //  Implemented after FCL MenuView.java and ZL2 GameScreen.kt
 //  Key improvement: hitTest pass-through, so only the button/label areas capture touches and everything else reaches the game

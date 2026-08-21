@@ -456,13 +456,13 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
                 // Inside LiveContainer: assign the script automatically and ask the user to restart
                 lcAppInfo[@"jitLaunchScriptJs"] = [[NSData dataWithContentsOfFile:inBundleScriptPath] base64EncodedStringWithOptions:0];
                 if([lcAppInfo writeToFile:lcAppInfoPath atomically:YES]) {
-                    showDialog(localize(@"Error", nil), @"Amethyst was launched with a legacy script. We have updated the script to Universal, please restart LiveContainer to continue.");
+                    showDialog(localize(@"Error", nil), @"Flux was launched with a legacy script. We have updated the script to Universal, please restart LiveContainer to continue.");
                     [PLLogOutputView handleExitCode:1];
                     return 1;
                 }
             }
             [NSFileManager.defaultManager copyItemAtPath:inBundleScriptPath toPath:[NSString stringWithFormat:@"%s/UniversalJIT26.js", getenv("POJAV_HOME")] error:nil];
-            showDialog(localize(@"Error", nil), @"Support for legacy script has been removed. Please switch to Universal JIT script. To import it, long-press on Amethyst when enabling JIT in StikDebug and tap \"Assign Script\", then go to Amethyst's Documents directory and pick it. (on sideloaded StikDebug, the builtin script is named Amethyst-MeloNX.js)");
+            showDialog(localize(@"Error", nil), @"Support for legacy script has been removed. Please switch to Universal JIT script. To import it, long-press on Flux when enabling JIT in StikDebug and tap \"Assign Script\", then go to Flux's Documents directory and pick it. (on sideloaded StikDebug, the builtin script is named Amethyst-MeloNX.js)");
             [PLLogOutputView handleExitCode:1];
             return 1;
         }

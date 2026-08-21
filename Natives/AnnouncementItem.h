@@ -1,6 +1,6 @@
 //
 //  AnnouncementItem.h
-//  Amethyst
+//  Flux
 //
 //  Announcement data model
 //  Data source: the JSON API pointed at by general.news_url (default https://amethyst.ct.ws/api/announcements.json)

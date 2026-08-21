@@ -1,6 +1,6 @@
 //
 //  MultiplayerManager.m
-//  Amethyst
+//  Flux
 //
 //  Implementation of the Minecraft multiplayer manager built on the ZeroTier Apple Framework
 //

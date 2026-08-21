@@ -1,6 +1,6 @@
 //
 //  WorldsManagerViewController.m
-//  Amethyst
+//  Flux
 //
 //  World save management view controller implementation, modeled on ModsManagerViewController
 //  Uses WorldService for local scanning and downloading (with robust extraction)

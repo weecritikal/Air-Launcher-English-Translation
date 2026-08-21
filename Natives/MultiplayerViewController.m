@@ -1,6 +1,6 @@
 //
 //  MultiplayerViewController.m
-//  Amethyst
+//  Flux
 //
 //  Implementation of the Minecraft multiplayer screen (the FCL-style rebuild)
 //

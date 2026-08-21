@@ -1,6 +1,6 @@
 //
 //  ModService.h
-//  AmethystMods
+//  FluxMods
 //
 //
 

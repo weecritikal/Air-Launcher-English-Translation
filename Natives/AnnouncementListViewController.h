@@ -1,6 +1,6 @@
 //
 //  AnnouncementListViewController.h
-//  Amethyst
+//  Flux
 //
 //  Announcement list view controller
 //  Follows the waterfall card style of MinecraftNewsViewController, simplified:

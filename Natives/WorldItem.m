@@ -1,6 +1,6 @@
 //
 //  WorldItem.m
-//  Amethyst
+//  Flux
 //
 //  World save data model implementation
 //

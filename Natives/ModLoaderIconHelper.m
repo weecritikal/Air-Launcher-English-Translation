@@ -1,6 +1,6 @@
 //
 //  ModLoaderIconHelper.m
-//  Amethyst
+//  Flux
 //
 //  Implementation of the unified mod loader icon helper
 // Following the loader icon systems of FCL/ZL2, unifying the three parallel loader representations in this project

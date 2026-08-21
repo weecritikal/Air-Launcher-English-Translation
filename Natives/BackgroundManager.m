@@ -1,6 +1,6 @@
 //
 //  BackgroundManager.m
-//  Amethyst
+//  Flux
 //
 //  Background wallpaper manager implementation - Global Version with Transparency
 //

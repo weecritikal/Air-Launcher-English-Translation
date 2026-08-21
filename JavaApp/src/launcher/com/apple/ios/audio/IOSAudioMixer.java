@@ -3,7 +3,7 @@ import javax.sound.sampled.*;
 public class IOSAudioMixer implements Mixer {
     private static class IOSMixerInfo extends Mixer.Info {
         IOSMixerInfo() {
-            super("iOS Audio Capture", "Amethyst",
+            super("iOS Audio Capture", "Flux",
                   "iOS native microphone via AVAudioEngine", "1.0");
         }
     }

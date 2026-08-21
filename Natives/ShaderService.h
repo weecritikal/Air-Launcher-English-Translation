@@ -1,6 +1,6 @@
 //
 //  ShaderService.h
-//  Amethyst
+//  Flux
 //
 //  Service for managing shader packs (local and online)
 //

@@ -1,6 +1,6 @@
 //
 //  AnnouncementListViewController.m
-//  Amethyst
+//  Flux
 //
 
 #import "AnnouncementListViewController.h"

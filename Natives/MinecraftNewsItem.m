@@ -1,6 +1,6 @@
 //
 //  MinecraftNewsItem.m
-//  Amethyst
+//  Flux
 //
 
 #import "MinecraftNewsItem.h"

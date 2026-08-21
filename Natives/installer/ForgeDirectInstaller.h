@@ -1,6 +1,6 @@
 //
 //  ForgeDirectInstaller.h
-//  Amethyst
+//  Flux
 //
 //  Direct Forge installer (old + new format) based on FCL logic.
 //

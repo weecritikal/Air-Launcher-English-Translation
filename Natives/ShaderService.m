@@ -1,6 +1,6 @@
 //
 //  ShaderService.m
-//  Amethyst
+//  Flux
 //
 //  Shader service implementation - Fixed version
 //  Fix: use defaultSessionConfiguration consistently, switching to NSURLSessionDownloadTask for better download throughput

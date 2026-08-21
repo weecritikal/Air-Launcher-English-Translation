@@ -1,6 +1,6 @@
 //
 //  ModpackImportService.h
-//  Amethyst
+//  Flux
 //
 //  Modpack import service - supports the .zip and .mrpack formats
 //

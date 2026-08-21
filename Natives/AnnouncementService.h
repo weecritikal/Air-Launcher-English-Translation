@@ -1,6 +1,6 @@
 //
 //  AnnouncementService.h
-//  Amethyst
+//  Flux
 //
 //  Announcement fetch service
 //  Fetches the announcement list from the JSON API pointed at by general.news_url, with a 30-minute local cache.

@@ -1,6 +1,6 @@
 //
 //  DataPackService.m
-//  Amethyst
+//  Flux
 //
 //  Data pack service implementation, structured like ShaderService/ModService
 //  The API consistently takes NSString *profileName

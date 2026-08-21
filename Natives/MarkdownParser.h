@@ -1,6 +1,6 @@
 //
 //  MarkdownParser.h
-//  Amethyst
+//  Flux
 //
 //  Lightweight Markdown -> NSAttributedString converter
 //  No third-party libraries, pure UIKit. Supports: h1-h3, bold **text**, italic *text*,
