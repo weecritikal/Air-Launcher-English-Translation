@@ -1376,7 +1376,7 @@ static NSString *festivalGreeting(void) {
         return;
     }
     
-    NSURL *url = [NSURL URLWithString:@"https://github.com/weecritikal/Air-Launcher-English-Translation/releases/latest"];
+    NSURL *url = [NSURL URLWithString:@"https://github.com/weecritikal/Flux-Launcher-iOS/releases/latest"];
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     [request setHTTPMethod:@"GET"];
     
@@ -1494,7 +1494,7 @@ static NSString *festivalGreeting(void) {
 }
 
 - (void)downloadLatestVersion {
-    NSString *urlString = @"https://github.com/weecritikal/Air-Launcher-English-Translation/releases/latest";
+    NSString *urlString = @"https://github.com/weecritikal/Flux-Launcher-iOS/releases/latest";
     NSURL *url = [NSURL URLWithString:urlString];
     if ([[UIApplication sharedApplication] canOpenURL:url]) {
         [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];

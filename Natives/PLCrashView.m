@@ -65,7 +65,7 @@ typedef NS_ENUM(NSInteger, CrashType) {
 
 // The crash VC instance currently on screen (a singleton)
 static PLCrashView *currentCrashVC = nil;
-static NSString *const kGitHubIssuesURL = @"https://github.com/weecritikal/Air-Launcher-English-Translation/issues";
+static NSString *const kGitHubIssuesURL = @"https://github.com/weecritikal/Flux-Launcher-iOS/issues";
 
 #pragma mark - Public Methods
 

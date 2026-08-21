@@ -6,11 +6,11 @@
 <p align="center"><sub>Amethyst iOS Rewritten</sub></p>
 
 <div align="center">
-  <img alt="Build Status" src="https://github.com/weecritikal/Air-Launcher-English-Translation/actions/workflows/development.yml/badge.svg?branch=main">
-  <img alt="Downloads" src="https://img.shields.io/github/downloads/weecritikal/Air-Launcher-English-Translation/total?label=Downloads&style=flat">
-  <img alt="Release" src="https://img.shields.io/github/v/release/weecritikal/Air-Launcher-English-Translation?style=flat">
-  <img alt="License" src="https://img.shields.io/github/license/weecritikal/Air-Launcher-English-Translation?style=flat">
-  <img alt="Last Commit" src="https://img.shields.io/github/last-commit/weecritikal/Air-Launcher-English-Translation?color=c78aff&label=last%20commit&style=flat">
+  <img alt="Build Status" src="https://github.com/weecritikal/Flux-Launcher-iOS/actions/workflows/development.yml/badge.svg?branch=main">
+  <img alt="Downloads" src="https://img.shields.io/github/downloads/weecritikal/Flux-Launcher-iOS/total?label=Downloads&style=flat">
+  <img alt="Release" src="https://img.shields.io/github/v/release/weecritikal/Flux-Launcher-iOS?style=flat">
+  <img alt="License" src="https://img.shields.io/github/license/weecritikal/Flux-Launcher-iOS?style=flat">
+  <img alt="Last Commit" src="https://img.shields.io/github/last-commit/weecritikal/Flux-Launcher-iOS?color=c78aff&label=last%20commit&style=flat">
 </div>
 
 ---
@@ -121,14 +121,14 @@ Prioritize tools that support permanent signing and automatic JIT enablement:
 <details>
 <summary><b>Official Release (TrollStore)</b></summary>
 
-1. Download the `.tipa` package from [Releases](https://github.com/weecritikal/Air-Launcher-English-Translation/releases).
+1. Download the `.tipa` package from [Releases](https://github.com/weecritikal/Flux-Launcher-iOS/releases).
 2. Open the file with TrollStore via the system share menu to complete installation.
 </details>
 
 <details>
 <summary><b>Official Release (AltStore / SideStore)</b></summary>
 
-1. Download the `.ipa` package from [Releases](https://github.com/weecritikal/Air-Launcher-English-Translation/releases).
+1. Download the `.ipa` package from [Releases](https://github.com/weecritikal/Flux-Launcher-iOS/releases).
 2. Import the IPA into your sideloading tool following its standard installation procedure.
 </details>
 
@@ -138,7 +138,7 @@ Prioritize tools that support permanent signing and automatic JIT enablement:
 > [!CAUTION]
 > Nightly builds may contain critical bugs including crashes and startup failures. Use only for development and testing purposes.
 
-1. Navigate to the [GitHub Actions](https://github.com/weecritikal/Air-Launcher-English-Translation/actions) page and download the latest IPA artifact.
+1. Navigate to the [GitHub Actions](https://github.com/weecritikal/Flux-Launcher-iOS/actions) page and download the latest IPA artifact.
 2. Import the IPA into your sideloading tool (AltStore, SideStore, etc.) to install.
 </details>
 

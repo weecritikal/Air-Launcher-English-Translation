@@ -11,7 +11,7 @@
 @implementation UpdateChecker
 
 + (NSString *)repoOwner { return @"weecritikal"; }
-+ (NSString *)repoName { return @"Air-Launcher-English-Translation"; }
++ (NSString *)repoName { return @"Flux-Launcher-iOS"; }
 
 + (NSString *)latestReleaseURL {
     /* The /releases/latest endpoint automatically returns the newest non-pre-release (stable) version */
