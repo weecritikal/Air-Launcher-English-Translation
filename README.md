@@ -3,7 +3,7 @@
 </div>
 
 <h1 align="center">Flux</h1>
-<p align="center"><sub>Amethyst iOS Remastered</sub></p>
+<p align="center"><sub>Amethyst iOS Rewritten</sub></p>
 
 <div align="center">
   <img alt="Build Status" src="https://github.com/weecritikal/Air-Launcher-English-Translation/actions/workflows/development.yml/badge.svg?branch=main">
