@@ -146,12 +146,17 @@ build("f_c.png", (18, 40, 42), (5, 11, 12),
 if __name__ == "__main__" and len(__import__("sys").argv) > 1 and __import__("sys").argv[1] == "install":
     import os, shutil
     from PIL import Image
-    ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    # Repo root: two levels up from tools/branding when run in place, or FLUX_ROOT when
+    # the script is run from a scratch copy elsewhere.
+    ROOT = os.environ.get("FLUX_ROOT") or os.path.abspath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
     VARIANTS = {
         # name        source render        catalog dir / filename                                  loose prefix
-        "Light":  ("f_a.png", "AppIcon-Light.appiconset/1024x1024.png",                    "AppIcon-Light"),
+        "Light":  ("f_c.png", "AppIcon-Light.appiconset/1024x1024.png",                    "AppIcon-Light"),
         "Dark":   ("f_dark.png", "AppIcon-Dark.appiconset/AppIcon-Dark_1024x1024.png",        "AppIcon-Dark"),
-        "Development": ("f_c.png", "AppIcon-Development.appiconset/AppIcon-Development_1024x1024.png", "AppIcon-Development"),
+        # Development stays visibly different from the shipping icon, so a dev build on
+        # the home screen is never mistaken for the real one.
+        "Development": ("f_b.png", "AppIcon-Development.appiconset/AppIcon-Development_1024x1024.png", "AppIcon-Development"),
     }
     for label, (src, catalog, prefix) in VARIANTS.items():
         im = Image.open(src).convert("RGB")
@@ -161,7 +166,7 @@ if __name__ == "__main__" and len(__import__("sys").argv) > 1 and __import__("sy
             out = os.path.join(ROOT, "Natives/resources", prefix + suffix)
             im.resize((px, px), Image.LANCZOS).save(out); print("  ", out)
     # the unprefixed pair is the primary icon
-    im = Image.open("f_a.png").convert("RGB")
+    im = Image.open("f_c.png").convert("RGB")
     for px, suffix in ((120, "60x60@2x.png"), (152, "76x76@2x~ipad.png")):
         out = os.path.join(ROOT, "Natives/resources", "AppIcon" + suffix)
         im.resize((px, px), Image.LANCZOS).save(out); print("  ", out)
