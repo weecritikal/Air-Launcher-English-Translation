@@ -1042,6 +1042,32 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     // for a large drop in short-lived allocation.
     PUSH_MARGV_LITERAL("-XX:AutoBoxCacheMax=20000");
 
+    // Thread stacks were the largest reducible thing in the process. A crash report from a
+    // large 1.20.1 pack showed 128 live threads holding 258 MB of stack - the JVM commits
+    // 2 MB per thread on this platform, and Minecraft spawns threads generously: chunk
+    // builders, worker pools, netty, and whatever the mods add. Almost none of that depth
+    // is ever used.
+    //
+    // 1 MB is the default HotSpot uses on 64-bit Linux, which is the platform the entire
+    // modded ecosystem is built and tested against, so a mod that overflows here would
+    // overflow on a desktop too. Halving it hands roughly 129 MB back to the process - and
+    // on iOS the process ceiling, not the heap setting, is what decides whether a pack runs
+    // at all: the same report showed the app at 3.0 GB committed with the graphics driver
+    // then refused an allocation and taking the game down.
+    PUSH_MARGV_LITERAL("-Xss1m");
+
+    // How long the collector keeps softly-referenced objects once memory gets tight. The
+    // default is a second of grace per megabyte of free heap, which is generous when there
+    // is room and actively harmful when there is not: at the point the crash happened the
+    // heap had 12 MB free, so caches were being held for another twelve seconds while the
+    // collector ran 98 preventive collections trying to find space.
+    //
+    // Mods put their texture, model and recipe caches behind soft references precisely so
+    // they can be dropped under pressure. Shortening the grace period lets that happen while
+    // it can still help. It costs some re-loading on a machine with room to spare, which is
+    // the right trade on a phone.
+    PUSH_MARGV_LITERAL("-XX:SoftRefLRUPolicyMSPerMB=250");
+
     setenv("INTERNAL_JLI_PATH", (isJava8 ? libjlipath8 : libjlipath11).UTF8String, 1);
     void* libjli = dlopen(getenv("INTERNAL_JLI_PATH"), RTLD_GLOBAL);
 
