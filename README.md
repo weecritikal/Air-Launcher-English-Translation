@@ -3,14 +3,14 @@
 </div>
 
 <h1 align="center">Flux</h1>
-<p align="center"><sub>Amethyst iOS Rewritten</sub></p>
+<p align="center"><sub>Minecraft: Java Edition, on iPhone and iPad</sub></p>
 
 <div align="center">
   <img alt="Build Status" src="https://github.com/weecritikal/Flux-Launcher-iOS/actions/workflows/development.yml/badge.svg?branch=main">
   <img alt="Downloads" src="https://img.shields.io/github/downloads/weecritikal/Flux-Launcher-iOS/total?label=Downloads&style=flat">
   <img alt="Release" src="https://img.shields.io/github/v/release/weecritikal/Flux-Launcher-iOS?style=flat">
   <img alt="License" src="https://img.shields.io/github/license/weecritikal/Flux-Launcher-iOS?style=flat">
-  <img alt="Last Commit" src="https://img.shields.io/github/last-commit/weecritikal/Flux-Launcher-iOS?color=c78aff&label=last%20commit&style=flat">
+  <img alt="Last Commit" src="https://img.shields.io/github/last-commit/weecritikal/Flux-Launcher-iOS?color=1AB096&label=last%20commit&style=flat">
 </div>
 
 ---
