@@ -232,6 +232,14 @@ jobs:
             gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
           fi
 
+      - name: Check every logging file can link the logging macro
+        if: success()
+        run: |
+          # utils.h routes NSLog through customNSLog, which only the main executable
+          # links. A file in another target that includes it compiles fine and fails at
+          # link, a long way from the cause.
+          python3 tools/check_log_macro_linkage.py
+
       - name: Check the loader version gates match what the loaders publish
         if: success()
         run: |

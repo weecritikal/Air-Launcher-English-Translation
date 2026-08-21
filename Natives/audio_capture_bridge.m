@@ -2,7 +2,12 @@
 #include <AVFoundation/AVFoundation.h>
 #include <pthread.h>
 #include "jni.h"
-#import "utils.h"
+// Deliberately NOT utils.h. Its NSLog macro expands to customNSLog, which lives in
+// utils.m - and utils.m is compiled into the Flux executable, not into this file's
+// target. audio_capture is a separate shared library linking only AVFoundation, so
+// including utils.h here leaves _customNSLog undefined at link time. That means this
+// file's log output goes to os_log rather than latestlog.txt; adding utils.m to the
+// audio_capture target would be the alternative, and is not worth it for three lines.
 
 #define CIRCULAR_BUFFER_SIZE (48000 * 2 * 8)
 
