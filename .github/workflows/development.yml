@@ -232,6 +232,14 @@ jobs:
             gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
           fi
 
+      - name: Check every on-screen string has English text
+        if: success()
+        run: |
+          # localize()'s second argument is a comment, not a fallback: a key missing from
+          # en.lproj reaches the screen as its own name. Nothing fails at build or launch,
+          # which is how "download.progress.downloading" got in front of a user.
+          python3 tools/check_localized_keys.py
+
       - name: Check every logging file can link the logging macro
         if: success()
         run: |

@@ -715,3 +715,19 @@
 // Memory limit help dialog
 "mem_help.title" = "About Memory Limit";
 "mem_help.message" = "iOS 18 / iOS 26 single-instance memory limit is about 1440MB. Large modpacks may crash due to insufficient memory.\n\nSolution:\nUse GetMoreRam (a LiveContainer plugin) to lift the memory limit.\nGetMoreRam repo: github.com/hugeBlack/GetMoreRam\n\nRestart the launcher after installation to take effect.\n\nIf you don't use LiveContainer, try lowering the memory allocation (Settings > Java > Memory Allocation), but some modpacks may not run under the memory limit.";
+
+// Download progress. These were reaching the screen as their own key names - a user
+// reported seeing "download.progress.downloading" in the progress sheet. localize()'s
+// second argument is a comment, not a fallback, so a key absent from every .strings
+// file renders as the key itself for everyone.
+"download.progress.downloading" = "Downloading...";
+"download.progress.completed" = "Download complete";
+"download.progress.eta.soon" = "Almost done";
+"download.progress.eta.about_seconds" = "About %ld sec";
+"download.progress.eta.about_minutes" = "About %ld min";
+"download.progress.eta.about_hours" = "About %ld hr";
+"download.progress.eta.about_hours_minutes" = "About %ld hr %ld min";
+
+// Accounts
+"login.title" = "Account management";
+"login.cancelled" = "Login cancelled";
