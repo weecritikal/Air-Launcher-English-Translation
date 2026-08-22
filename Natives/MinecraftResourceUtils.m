@@ -157,6 +157,14 @@
             library[@"downloads"][@"artifact"][@"path"] = @"net/java/dev/jna/jna/5.13.0/jna-5.13.0.jar";
             library[@"downloads"][@"artifact"][@"url"] = @"https://repo1.maven.org/maven2/net/java/dev/jna/jna/5.13.0/jna-5.13.0.jar";
             library[@"downloads"][@"artifact"][@"sha1"] = @"1200e7ebeedbe0d10062093f32925a912020e747";
+            // The size still describes the jar we just decided not to download. Leaving it in
+            // place fails every launch: the integrity check compares 5.13.0's bytes against
+            // 5.17.0's expected length, decides the download was cut short, retries three times
+            // and gives up - so the file is never cached, is fetched again on the next start,
+            // and the launcher cannot work offline. Removing it lets the SHA1 above be the
+            // authority, which it should be anyway: a hash catches a truncated file completely,
+            // where a length only catches it sometimes.
+            [library[@"downloads"][@"artifact"] removeObjectForKey:@"size"];
         } else if ([library[@"name"] hasPrefix:@"org.ow2.asm:asm-all:"]) {
             // Early versions of the ASM library get repalced with 5.0.4 because Pojav's LWJGL is compiled for
             // Java 8, which is not supported by old ASM versions. Mod loaders like Forge, which depend on this
@@ -166,6 +174,9 @@
             library[@"downloads"][@"artifact"][@"path"] = @"org/ow2/asm/asm-all/5.0.4/asm-all-5.0.4.jar";
             library[@"downloads"][@"artifact"][@"sha1"] = @"e6244859997b3d4237a552669279780876228909";
             library[@"downloads"][@"artifact"][@"url"] = @"https://repo1.maven.org/maven2/org/ow2/asm/asm-all/5.0.4/asm-all-5.0.4.jar";
+            // Same reasoning as the JNA substitution above - the inherited size belongs to the
+            // version being replaced.
+            [library[@"downloads"][@"artifact"] removeObjectForKey:@"size"];
         }
     }
 
