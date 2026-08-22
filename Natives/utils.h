@@ -109,6 +109,10 @@ void openLink(UIViewController* sender, NSURL* link);
 void handle_fatal_exit(int code);
 
 NSString* localize(NSString* key, NSString* comment);
+
+// YES when an NSError means "there is no usable network right now", as opposed to the
+// server having answered with something we did not like.
+BOOL isConnectivityError(NSError *error);
 NSMutableDictionary* parseJSONFromFile(NSString *path);
 NSError* saveJSONToFile(NSDictionary *dict, NSString *path);
 void customNSLog(const char *file, int lineNumber, const char *functionName, NSString *format, ...);

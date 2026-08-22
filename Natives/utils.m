@@ -96,6 +96,33 @@ NSError* saveJSONToFile(NSDictionary *dict, NSString *path) {
     return nil;
 }
 
+/// Whether this error means the device could not reach the network at all.
+///
+/// Worth being exhaustive. The account refresh used to treat only
+/// NSURLErrorDataNotAllowed as "offline", which is the narrow case of cellular data
+/// being switched off for this app specifically. The ordinary way to be offline -
+/// airplane mode, no Wi-Fi - is NSURLErrorNotConnectedToInternet, and that fell through
+/// to the generic failure path, so a Microsoft account could not start the game without
+/// a connection even though the launcher has an offline path ready for exactly that.
+BOOL isConnectivityError(NSError *error) {
+    if (![error.domain isEqualToString:NSURLErrorDomain]) return NO;
+    switch (error.code) {
+        case NSURLErrorNotConnectedToInternet:   // airplane mode, no Wi-Fi, no signal
+        case NSURLErrorDataNotAllowed:           // cellular disabled for this app
+        case NSURLErrorNetworkConnectionLost:    // dropped mid-request
+        case NSURLErrorCannotConnectToHost:
+        case NSURLErrorCannotFindHost:
+        case NSURLErrorDNSLookupFailed:          // captive portals and dead DNS
+        case NSURLErrorTimedOut:
+        case NSURLErrorInternationalRoamingOff:
+        case NSURLErrorCallIsActive:
+        case NSURLErrorResourceUnavailable:
+            return YES;
+        default:
+            return NO;
+    }
+}
+
 NSString* localize(NSString* key, NSString* comment) {
     NSString *value = NSLocalizedString(key, nil);
     if (![NSLocale.preferredLanguages[0] isEqualToString:@"en"] && [value isEqualToString:key]) {

@@ -24,8 +24,9 @@ typedef void(^XSTSCallback)(NSString *xsts, NSString *uhs);
         self.authData[@"msaRefreshToken"] = response[@"refresh_token"];
         [self acquireXBLToken:response[@"access_token"] callback:callback];
     } failure:^(NSURLSessionDataTask *task, NSError *error) {
-        if (error.code == NSURLErrorDataNotAllowed) {
-            // The account token is expired and offline
+        if (isConnectivityError(error)) {
+            // No network to refresh against. The token is stale, but the launcher has
+            // an offline path for exactly this, so take it rather than refusing to start.
             self.authData[@"accessToken"] = @"offline";
             callback(nil, YES);
         } else {
