@@ -11,6 +11,28 @@ typedef struct {
     __unsafe_unretained NSString *reason;
 } PLUnsupportedMod;
 
+/// Two mods that do the same job and cannot both be installed.
+///
+/// @c supersededPrefix is the one to set aside; @c keepsPrefix is the one that stays. Both must be
+/// present for the rule to fire - either alone is fine.
+typedef struct {
+    __unsafe_unretained NSString *supersededPrefix;
+    __unsafe_unretained NSString *keepsPrefix;
+    __unsafe_unretained NSString *reason;
+} PLConflictingMods;
+
+/// Whether any enabled jar in @c entries starts with @c prefix.
+static BOOL PLDirectoryHasMod(NSArray<NSString *> *entries, NSString *prefix) {
+    for (NSString *name in entries) {
+        if ([name hasPrefix:@"."]) continue;
+        if (![name.pathExtension.lowercaseString isEqualToString:@"jar"]) continue;
+        NSRange match = [name rangeOfString:prefix
+                                    options:NSCaseInsensitiveSearch | NSAnchoredSearch];
+        if (match.location != NSNotFound) return YES;
+    }
+    return NO;
+}
+
 static NSArray<NSDictionary<NSString *, NSString *> *> *PLScanUnsupportedMods(NSString *directory) {
     // Kept deliberately short. A mod belongs here only when it cannot work on this platform at all
     // and takes the game down with it - not when it merely runs badly or looks wrong.
@@ -51,6 +73,46 @@ static NSArray<NSDictionary<NSString *, NSString *> *> *PLScanUnsupportedMods(NS
             break;
         }
     }
+
+    // Mods that work alone and destroy each other together. A renderer replacement rewrites the
+    // whole terrain pipeline through mixins into the same Minecraft classes; installing two means
+    // two sets of buffers and two sets of GL state for one screen. The game loads, and then the
+    // graphics driver dies the moment a world is drawn - a SIGSEGV inside Apple's Metal driver
+    // that names nothing and looks exactly like a hardware fault.
+    static const PLConflictingMods kConflicts[] = {
+        {@"rubidium", @"embeddium",
+         @"is the older version of Embeddium - they are the same renderer, and this pack has both. "
+          "Two renderers rewriting the same drawing code crashes the graphics driver as soon as a "
+          "world loads. Embeddium is the maintained one, so it stays."},
+        {@"reeses_sodium_options", @"textrues_embeddium_options",
+         @"is the settings screen for Rubidium, which has been set aside. Embeddium's own settings "
+          "screen is installed and does the same job."},
+        {@"magnesium", @"embeddium",
+         @"is an older name for the same renderer as Embeddium. Two of them crash the graphics "
+          "driver as soon as a world loads."},
+    };
+    static const size_t kConflictCount = sizeof(kConflicts) / sizeof(kConflicts[0]);
+
+    for (size_t i = 0; i < kConflictCount; i++) {
+        if (!PLDirectoryHasMod(entries, kConflicts[i].keepsPrefix)) continue;
+        for (NSString *name in entries) {
+            if ([name hasPrefix:@"."]) continue;
+            if (![name.pathExtension.lowercaseString isEqualToString:@"jar"]) continue;
+            NSRange match = [name rangeOfString:kConflicts[i].supersededPrefix
+                                        options:NSCaseInsensitiveSearch | NSAnchoredSearch];
+            if (match.location == NSNotFound) continue;
+
+            // A jar already listed above is set aside for a stronger reason; do not report it twice.
+            BOOL already = NO;
+            for (NSDictionary *entry in found) {
+                if ([entry[@"name"] isEqualToString:name]) { already = YES; break; }
+            }
+            if (!already) {
+                [found addObject:@{@"name": name, @"reason": kConflicts[i].reason}];
+            }
+        }
+    }
+
     return found;
 }
 
